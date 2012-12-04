@@ -29,7 +29,7 @@
 #include "bytestream.h"
 #include "libavutil/colorspace.h"
 #include "libavutil/imgutils.h"
-
+#include "libavutil/opt.h"
 #define RGBA(r,g,b,a) (((a) << 24) | ((r) << 16) | ((g) << 8) | (b))
 
 enum SegmentType {
@@ -44,6 +44,7 @@ typedef struct PGSSubPictureReference {
     int x;
     int y;
     int picture_id;
+	int composition;
 } PGSSubPictureReference;
 
 typedef struct PGSSubPresentation {
@@ -284,7 +285,6 @@ static void parse_palette_segment(AVCodecContext *avctx,
  * @param buf pointer to the packet to process
  * @param buf_size size of packet to process
  * @todo TODO: Implement cropping
- * @todo TODO: Implement forcing of subtitles
  */
 static void parse_presentation_segment(AVCodecContext *avctx,
                                        const uint8_t *buf, int buf_size)
@@ -341,8 +341,8 @@ static void parse_presentation_segment(AVCodecContext *avctx,
          *     window_id_ref,
          *     composition_flag (0x80 - object cropped, 0x40 - object forced)
          */
-        buf += 2;
-
+        buf++;
+		reference->composition = bytestream_get_byte(&buf);
         reference->x = bytestream_get_be16(&buf);
         reference->y = bytestream_get_be16(&buf);
 
@@ -426,8 +426,14 @@ static int display_end_segment(AVCodecContext *avctx, void *data,
         /* Allocate memory for colors */
         sub->rects[rect]->nb_colors    = 256;
         sub->rects[rect]->pict.data[1] = av_mallocz(AVPALETTE_SIZE);
+		/* Copy the forced flag */
+ 
+		sub->rects[rect]->forced = (ctx->presentation.objects[rect].composition & 0x40) != 0;
+ 		
+		if (!avctx->forced_subs_only || ctx->presentation.objects[rect].composition & 0x40)
+		memcpy(sub->rects[rect]->pict.data[1], ctx->clut, sub->rects[rect]->nb_colors * sizeof(uint32_t));
+ 
 
-        memcpy(sub->rects[rect]->pict.data[1], ctx->clut, sub->rects[rect]->nb_colors * sizeof(uint32_t));
     }
 
     return 1;
@@ -489,7 +495,7 @@ static int decode(AVCodecContext *avctx, void *data, int *data_size,
         case WINDOW_SEGMENT:
             /*
              * Window Segment Structure (No new information provided):
-             *     2 bytes: Unkown,
+             *     2 bytes: Unknown,
              *     2 bytes: X position of subtitle,
              *     2 bytes: Y position of subtitle,
              *     2 bytes: Width of subtitle,

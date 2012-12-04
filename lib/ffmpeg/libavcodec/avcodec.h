@@ -3141,6 +3141,13 @@ typedef struct AVCodecContext {
      * - encoding: unused
      */
     AVPacket *pkt;
+    /**
+	* Requests that only forced subpictures be decoded.
+	* - decoding: set by user
+	* - encoding: unused
+	*/
+    int forced_subs_only;
+ 
 
 #if FF_API_INTERNAL_CONTEXT
     /**
@@ -3510,6 +3517,7 @@ typedef struct AVSubtitleRect {
      * struct.
      */
     char *ass;
+	int forced;     ///< 1 if this subtitle should be displayed when subs disabled
 } AVSubtitleRect;
 
 typedef struct AVSubtitle {
